@@ -2,11 +2,12 @@
 // See the LICENCE file in the repository root for full licence text.
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO.Ports;
 using System.Linq;
 using osu.Framework.Bindables;
 using osu.Framework.Graphics.Sprites;
+using osu.Framework.Logging;
 using osu.Game.Configuration;
 using osu.Game.Graphics;
 using osu.Game.Rulesets.Mods;
@@ -16,15 +17,14 @@ using osu.Game.Rulesets.Osu.Objects.Drawables;
 using osu.Game.Rulesets.Replays;
 using osu.Game.Rulesets.UI;
 using osu.Game.Screens.Play;
-using static osu.Game.Input.Handlers.ReplayInputHandler;
 
 namespace osu.Game.Rulesets.Osu.Mods
 {
     public class OsuModSolenoid : Mod, IUpdatableByPlayfield, IApplicableToDrawableRuleset<OsuHitObject>, IApplicableToPlayer
     {
         public override string Description => @"Monkey mode";
-        public override string Name => "Solenoid";
-        public override string Acronym => "SL";
+        public override string Name => "Monkey Mode";
+        public override string Acronym => "MM";
         public override IconUsage? Icon => OsuIcon.PlayStyleKeyboard;
         public override ModType Type => ModType.Automation;
         public override double ScoreMultiplier => 1;
@@ -39,14 +39,16 @@ namespace osu.Game.Rulesets.Osu.Mods
         private const float relax_leniency = 3;
 
         private bool isDownState;
-        private bool wasLeft;
+        private bool wasLeft = true;
 
         private OsuInputManager osuInputManager;
 
-        private ReplayState<OsuAction> state;
+        //private ReplayState<OsuAction> state;
         private double lastStateChangeTime;
 
         private bool hasReplay;
+        private bool connected;
+        private SerialPort sp;
 
         public void ApplyToDrawableRuleset(DrawableRuleset<OsuHitObject> drawableRuleset)
         {
@@ -57,6 +59,26 @@ namespace osu.Game.Rulesets.Osu.Mods
         public void ApplyToPlayer(Player player)
         {
             hasReplay = osuInputManager.ReplayInputHandler != null;
+
+            if (!hasReplay)
+            {
+                string[] devices = SerialPort.GetPortNames();
+                sp = new SerialPort(devices[0], 9600);
+
+                try
+                {
+                    sp.Open();
+                    sp.WriteTimeout = 30;
+                }
+                catch (Exception e)
+                {
+                    Logger.Error(e, e.Message);
+                }
+                finally
+                {
+                    connected = sp.IsOpen;
+                }
+            }
         }
 
         public void Update(Playfield playfield)
@@ -121,24 +143,30 @@ namespace osu.Game.Rulesets.Osu.Mods
 
             void changeState(bool down)
             {
-                if (isDownState == down)
+                if (isDownState == down || !connected)
                     return;
 
                 isDownState = down;
                 lastStateChangeTime = time;
 
-                state = new ReplayState<OsuAction>
+                try
                 {
-                    PressedActions = new List<OsuAction>()
-                };
-
-                if (down)
-                {
-                    state.PressedActions.Add(wasLeft ? OsuAction.LeftButton : OsuAction.RightButton);
-                    wasLeft = !wasLeft;
+                    if (down)
+                    {
+                        Logger.Log("TIME TO PRESS LE BUTTON", LoggingTarget.Runtime);
+                        sp.Write(new byte[] { wasLeft ? (byte)1 : (byte)3 }, 0, 1);
+                        wasLeft = !wasLeft;
+                    }
+                    else
+                    {
+                        Logger.Log("TIME TO UNPRESS LE BUTTON", LoggingTarget.Runtime);
+                        sp.Write(new byte[] { 0, 2 }, 0, 2);
+                    }
                 }
-
-                //state?.Apply(osuInputManager.CurrentState, osuInputManager);
+                catch (Exception e)
+                {
+                    Logger.Error(e, e.Message);
+                }
             }
         }
     }
