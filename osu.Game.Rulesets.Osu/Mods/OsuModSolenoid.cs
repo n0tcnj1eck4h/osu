@@ -50,6 +50,16 @@ namespace osu.Game.Rulesets.Osu.Mods
         private bool connected;
         private SerialPort sp;
 
+        public OsuModSolenoid()
+        {
+            Logger.Log("Solenoid constructor");
+        }
+
+        ~OsuModSolenoid()
+        {
+            Logger.Log("Solenoid destructor");
+        }
+
         public void ApplyToDrawableRuleset(DrawableRuleset<OsuHitObject> drawableRuleset)
         {
             // grab the input manager for future use.
@@ -63,7 +73,7 @@ namespace osu.Game.Rulesets.Osu.Mods
             if (!hasReplay)
             {
                 string[] devices = SerialPort.GetPortNames();
-                sp = new SerialPort(devices[0], 9600);
+                sp = new SerialPort(devices[0], 115200);
 
                 try
                 {
